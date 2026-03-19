@@ -57,7 +57,11 @@ Value Binary::eval(Assoc &e) { // evaluation of two-operators primitive
 }
 
 Value Variadic::eval(Assoc &e) { // evaluation of multi-operator primitive
-    // TODO: TO COMPLETE THE VARIADIC CLASS
+    std::vector<Value> evaluated_rands;
+    for (auto& rand_expr : rands) {
+        evaluated_rands.push_back(rand_expr->eval(e));
+    }
+    return evalRator(evaluated_rands);
 }
 
 Value Var::eval(Assoc &e) { // evaluation of variable
@@ -104,22 +108,209 @@ Value Var::eval(Assoc &e) { // evaluation of variable
 }
 
 Value Plus::evalRator(const Value &rand1, const Value &rand2) { // +
-    //TODO: To complete the addition logic
+    // Handle Integer + Integer
+    if (rand1->v_type == V_INT && rand2->v_type == V_INT) {
+        int n1 = dynamic_cast<Integer*>(rand1.get())->n;
+        int n2 = dynamic_cast<Integer*>(rand2.get())->n;
+        // Check for overflow
+        if ((n2 > 0 && n1 > INT_MAX - n2) || (n2 < 0 && n1 < INT_MIN - n2)) {
+            throw RuntimeError("Integer overflow in addition");
+        }
+        return IntegerV(n1 + n2);
+    }
+    // Handle Rational + Integer
+    else if (rand1->v_type == V_RATIONAL && rand2->v_type == V_INT) {
+        Rational* r1 = dynamic_cast<Rational*>(rand1.get());
+        int n2 = dynamic_cast<Integer*>(rand2.get())->n;
+        // a/b + c = (a + c*b)/b
+        int new_num = r1->numerator + n2 * r1->denominator;
+        return RationalV(new_num, r1->denominator);
+    }
+    // Handle Integer + Rational
+    else if (rand1->v_type == V_INT && rand2->v_type == V_RATIONAL) {
+        int n1 = dynamic_cast<Integer*>(rand1.get())->n;
+        Rational* r2 = dynamic_cast<Rational*>(rand2.get());
+        // c + a/b = (c*b + a)/b
+        int new_num = n1 * r2->denominator + r2->numerator;
+        return RationalV(new_num, r2->denominator);
+    }
+    // Handle Rational + Rational
+    else if (rand1->v_type == V_RATIONAL && rand2->v_type == V_RATIONAL) {
+        Rational* r1 = dynamic_cast<Rational*>(rand1.get());
+        Rational* r2 = dynamic_cast<Rational*>(rand2.get());
+        // a/b + c/d = (a*d + c*b)/(b*d)
+        int new_num = r1->numerator * r2->denominator + r2->numerator * r1->denominator;
+        int new_den = r1->denominator * r2->denominator;
+        return RationalV(new_num, new_den);
+    }
     throw(RuntimeError("Wrong typename"));
 }
 
 Value Minus::evalRator(const Value &rand1, const Value &rand2) { // -
-    //TODO: To complete the substraction logic
+    // Handle Integer - Integer
+    if (rand1->v_type == V_INT && rand2->v_type == V_INT) {
+        int n1 = dynamic_cast<Integer*>(rand1.get())->n;
+        int n2 = dynamic_cast<Integer*>(rand2.get())->n;
+        // Check for overflow
+        if ((n2 > 0 && n1 < INT_MIN + n2) || (n2 < 0 && n1 > INT_MAX + n2)) {
+            throw RuntimeError("Integer overflow in subtraction");
+        }
+        return IntegerV(n1 - n2);
+    }
+    // Handle Rational - Integer
+    else if (rand1->v_type == V_RATIONAL && rand2->v_type == V_INT) {
+        Rational* r1 = dynamic_cast<Rational*>(rand1.get());
+        int n2 = dynamic_cast<Integer*>(rand2.get())->n;
+        // a/b - c = (a - c*b)/b
+        int new_num = r1->numerator - n2 * r1->denominator;
+        return RationalV(new_num, r1->denominator);
+    }
+    // Handle Integer - Rational
+    else if (rand1->v_type == V_INT && rand2->v_type == V_RATIONAL) {
+        int n1 = dynamic_cast<Integer*>(rand1.get())->n;
+        Rational* r2 = dynamic_cast<Rational*>(rand2.get());
+        // c - a/b = (c*b - a)/b
+        int new_num = n1 * r2->denominator - r2->numerator;
+        return RationalV(new_num, r2->denominator);
+    }
+    // Handle Rational - Rational
+    else if (rand1->v_type == V_RATIONAL && rand2->v_type == V_RATIONAL) {
+        Rational* r1 = dynamic_cast<Rational*>(rand1.get());
+        Rational* r2 = dynamic_cast<Rational*>(rand2.get());
+        // a/b - c/d = (a*d - c*b)/(b*d)
+        int new_num = r1->numerator * r2->denominator - r2->numerator * r1->denominator;
+        int new_den = r1->denominator * r2->denominator;
+        return RationalV(new_num, new_den);
+    }
     throw(RuntimeError("Wrong typename"));
 }
 
 Value Mult::evalRator(const Value &rand1, const Value &rand2) { // *
-    //TODO: To complete the Multiplication logic
+    // Handle Integer * Integer
+    if (rand1->v_type == V_INT && rand2->v_type == V_INT) {
+        int n1 = dynamic_cast<Integer*>(rand1.get())->n;
+        int n2 = dynamic_cast<Integer*>(rand2.get())->n;
+        // Check for overflow
+        if (n1 > 0) {
+            if (n2 > 0) {
+                if (n1 > INT_MAX / n2) throw RuntimeError("Integer overflow in multiplication");
+            } else if (n2 < 0) {
+                if (n2 < INT_MIN / n1) throw RuntimeError("Integer overflow in multiplication");
+            }
+        } else if (n1 < 0) {
+            if (n2 > 0) {
+                if (n1 < INT_MIN / n2) throw RuntimeError("Integer overflow in multiplication");
+            } else if (n2 < 0) {
+                if (n1 < INT_MAX / n2) throw RuntimeError("Integer overflow in multiplication");
+            }
+        }
+        return IntegerV(n1 * n2);
+    }
+    // Handle Rational * Integer
+    else if (rand1->v_type == V_RATIONAL && rand2->v_type == V_INT) {
+        Rational* r1 = dynamic_cast<Rational*>(rand1.get());
+        int n2 = dynamic_cast<Integer*>(rand2.get())->n;
+        // (a/b) * c = (a*c)/b
+        int new_num = r1->numerator * n2;
+        // Check for overflow in multiplication
+        if (r1->numerator != 0 && n2 != 0 &&
+            ((new_num / n2) != r1->numerator || (new_num / r1->numerator) != n2)) {
+            throw RuntimeError("Integer overflow in multiplication");
+        }
+        return RationalV(new_num, r1->denominator);
+    }
+    // Handle Integer * Rational
+    else if (rand1->v_type == V_INT && rand2->v_type == V_RATIONAL) {
+        int n1 = dynamic_cast<Integer*>(rand1.get())->n;
+        Rational* r2 = dynamic_cast<Rational*>(rand2.get());
+        // c * (a/b) = (c*a)/b
+        int new_num = n1 * r2->numerator;
+        // Check for overflow
+        if (n1 != 0 && r2->numerator != 0 &&
+            ((new_num / n1) != r2->numerator || (new_num / r2->numerator) != n1)) {
+            throw RuntimeError("Integer overflow in multiplication");
+        }
+        return RationalV(new_num, r2->denominator);
+    }
+    // Handle Rational * Rational
+    else if (rand1->v_type == V_RATIONAL && rand2->v_type == V_RATIONAL) {
+        Rational* r1 = dynamic_cast<Rational*>(rand1.get());
+        Rational* r2 = dynamic_cast<Rational*>(rand2.get());
+        // (a/b) * (c/d) = (a*c)/(b*d)
+        int new_num = r1->numerator * r2->numerator;
+        int new_den = r1->denominator * r2->denominator;
+        // Check for overflow
+        if (r1->numerator != 0 && r2->numerator != 0 &&
+            ((new_num / r1->numerator) != r2->numerator || (new_num / r2->numerator) != r1->numerator)) {
+            throw RuntimeError("Integer overflow in multiplication");
+        }
+        if (r1->denominator != 0 && r2->denominator != 0 &&
+            ((new_den / r1->denominator) != r2->denominator || (new_den / r2->denominator) != r1->denominator)) {
+            throw RuntimeError("Integer overflow in multiplication");
+        }
+        return RationalV(new_num, new_den);
+    }
     throw(RuntimeError("Wrong typename"));
 }
 
 Value Div::evalRator(const Value &rand1, const Value &rand2) { // /
-    //TODO: To complete the dicision logic
+    // Check for division by zero
+    if ((rand2->v_type == V_INT && dynamic_cast<Integer*>(rand2.get())->n == 0) ||
+        (rand2->v_type == V_RATIONAL && dynamic_cast<Rational*>(rand2.get())->numerator == 0)) {
+        throw RuntimeError("Division by zero");
+    }
+
+    // Handle Integer / Integer
+    if (rand1->v_type == V_INT && rand2->v_type == V_INT) {
+        int n1 = dynamic_cast<Integer*>(rand1.get())->n;
+        int n2 = dynamic_cast<Integer*>(rand2.get())->n;
+        // Integer division creates rational number
+        return RationalV(n1, n2);
+    }
+    // Handle Rational / Integer
+    else if (rand1->v_type == V_RATIONAL && rand2->v_type == V_INT) {
+        Rational* r1 = dynamic_cast<Rational*>(rand1.get());
+        int n2 = dynamic_cast<Integer*>(rand2.get())->n;
+        // (a/b) / c = a/(b*c)
+        int new_den = r1->denominator * n2;
+        // Check for overflow
+        if (r1->denominator != 0 && n2 != 0 &&
+            ((new_den / n2) != r1->denominator || (new_den / r1->denominator) != n2)) {
+            throw RuntimeError("Integer overflow in division");
+        }
+        return RationalV(r1->numerator, new_den);
+    }
+    // Handle Integer / Rational
+    else if (rand1->v_type == V_INT && rand2->v_type == V_RATIONAL) {
+        int n1 = dynamic_cast<Integer*>(rand1.get())->n;
+        Rational* r2 = dynamic_cast<Rational*>(rand2.get());
+        // c / (a/b) = (c*b)/a
+        int new_num = n1 * r2->denominator;
+        // Check for overflow
+        if (n1 != 0 && r2->denominator != 0 &&
+            ((new_num / n1) != r2->denominator || (new_num / r2->denominator) != n1)) {
+            throw RuntimeError("Integer overflow in division");
+        }
+        return RationalV(new_num, r2->numerator);
+    }
+    // Handle Rational / Rational
+    else if (rand1->v_type == V_RATIONAL && rand2->v_type == V_RATIONAL) {
+        Rational* r1 = dynamic_cast<Rational*>(rand1.get());
+        Rational* r2 = dynamic_cast<Rational*>(rand2.get());
+        // (a/b) / (c/d) = (a*d)/(b*c)
+        int new_num = r1->numerator * r2->denominator;
+        int new_den = r1->denominator * r2->numerator;
+        // Check for overflow
+        if (r1->numerator != 0 && r2->denominator != 0 &&
+            ((new_num / r1->numerator) != r2->denominator || (new_num / r2->denominator) != r1->numerator)) {
+            throw RuntimeError("Integer overflow in division");
+        }
+        if (r1->denominator != 0 && r2->numerator != 0 &&
+            ((new_den / r1->denominator) != r2->numerator || (new_den / r2->numerator) != r1->denominator)) {
+            throw RuntimeError("Integer overflow in division");
+        }
+        return RationalV(new_num, new_den);
+    }
     throw(RuntimeError("Wrong typename"));
 }
 
@@ -136,19 +327,308 @@ Value Modulo::evalRator(const Value &rand1, const Value &rand2) { // modulo
 }
 
 Value PlusVar::evalRator(const std::vector<Value> &args) { // + with multiple args
-    //TODO: To complete the addition logic
+    if (args.empty()) {
+        return IntegerV(0); // (+) returns 0
+    }
+
+    if (args.size() == 1) {
+        return args[0]; // (+ x) returns x
+    }
+
+    // Start with first argument
+    Value result = args[0];
+
+    // For each subsequent argument, add it to result
+    for (size_t i = 1; i < args.size(); ++i) {
+        const Value& current = args[i];
+
+        // Check types and perform addition
+        if (result->v_type == V_INT && current->v_type == V_INT) {
+            int n1 = dynamic_cast<Integer*>(result.get())->n;
+            int n2 = dynamic_cast<Integer*>(current.get())->n;
+            // Check for overflow
+            if ((n2 > 0 && n1 > INT_MAX - n2) || (n2 < 0 && n1 < INT_MIN - n2)) {
+                throw RuntimeError("Integer overflow in addition");
+            }
+            result = IntegerV(n1 + n2);
+        }
+        // Handle Rational + Integer
+        else if (result->v_type == V_RATIONAL && current->v_type == V_INT) {
+            Rational* r1 = dynamic_cast<Rational*>(result.get());
+            int n2 = dynamic_cast<Integer*>(current.get())->n;
+            int new_num = r1->numerator + n2 * r1->denominator;
+            result = RationalV(new_num, r1->denominator);
+        }
+        // Handle Integer + Rational
+        else if (result->v_type == V_INT && current->v_type == V_RATIONAL) {
+            int n1 = dynamic_cast<Integer*>(result.get())->n;
+            Rational* r2 = dynamic_cast<Rational*>(current.get());
+            int new_num = n1 * r2->denominator + r2->numerator;
+            result = RationalV(new_num, r2->denominator);
+        }
+        // Handle Rational + Rational
+        else if (result->v_type == V_RATIONAL && current->v_type == V_RATIONAL) {
+            Rational* r1 = dynamic_cast<Rational*>(result.get());
+            Rational* r2 = dynamic_cast<Rational*>(current.get());
+            int new_num = r1->numerator * r2->denominator + r2->numerator * r1->denominator;
+            int new_den = r1->denominator * r2->denominator;
+            result = RationalV(new_num, new_den);
+        }
+        else {
+            throw RuntimeError("Wrong typename in addition");
+        }
+    }
+
+    return result;
 }
 
 Value MinusVar::evalRator(const std::vector<Value> &args) { // - with multiple args
-    //TODO: To complete the substraction logic
+    if (args.empty()) {
+        throw RuntimeError("- requires at least one argument");
+    }
+
+    if (args.size() == 1) {
+        // (- x) returns -x
+        const Value& arg = args[0];
+        if (arg->v_type == V_INT) {
+            int n = dynamic_cast<Integer*>(arg.get())->n;
+            // Check for overflow when negating
+            if (n == INT_MIN) {
+                throw RuntimeError("Integer overflow in negation");
+            }
+            return IntegerV(-n);
+        } else if (arg->v_type == V_RATIONAL) {
+            Rational* r = dynamic_cast<Rational*>(arg.get());
+            return RationalV(-r->numerator, r->denominator);
+        } else {
+            throw RuntimeError("Wrong typename in negation");
+        }
+    }
+
+    // Start with first argument
+    Value result = args[0];
+
+    // For each subsequent argument, subtract it from result
+    for (size_t i = 1; i < args.size(); ++i) {
+        const Value& current = args[i];
+
+        // Check types and perform subtraction using same logic as binary minus
+        if (result->v_type == V_INT && current->v_type == V_INT) {
+            int n1 = dynamic_cast<Integer*>(result.get())->n;
+            int n2 = dynamic_cast<Integer*>(current.get())->n;
+            // Check for overflow
+            if ((n2 > 0 && n1 < INT_MIN + n2) || (n2 < 0 && n1 > INT_MAX + n2)) {
+                throw RuntimeError("Integer overflow in subtraction");
+            }
+            result = IntegerV(n1 - n2);
+        }
+        // Handle Rational - Integer
+        else if (result->v_type == V_RATIONAL && current->v_type == V_INT) {
+            Rational* r1 = dynamic_cast<Rational*>(result.get());
+            int n2 = dynamic_cast<Integer*>(current.get())->n;
+            int new_num = r1->numerator - n2 * r1->denominator;
+            result = RationalV(new_num, r1->denominator);
+        }
+        // Handle Integer - Rational
+        else if (result->v_type == V_INT && current->v_type == V_RATIONAL) {
+            int n1 = dynamic_cast<Integer*>(result.get())->n;
+            Rational* r2 = dynamic_cast<Rational*>(current.get());
+            int new_num = n1 * r2->denominator - r2->numerator;
+            result = RationalV(new_num, r2->denominator);
+        }
+        // Handle Rational - Rational
+        else if (result->v_type == V_RATIONAL && current->v_type == V_RATIONAL) {
+            Rational* r1 = dynamic_cast<Rational*>(result.get());
+            Rational* r2 = dynamic_cast<Rational*>(current.get());
+            int new_num = r1->numerator * r2->denominator - r2->numerator * r1->denominator;
+            int new_den = r1->denominator * r2->denominator;
+            result = RationalV(new_num, new_den);
+        }
+        else {
+            throw RuntimeError("Wrong typename in subtraction");
+        }
+    }
+
+    return result;
 }
 
 Value MultVar::evalRator(const std::vector<Value> &args) { // * with multiple args
-    //TODO: To complete the multiplication logic
+    if (args.empty()) {
+        return IntegerV(1); // (*) returns 1
+    }
+
+    if (args.size() == 1) {
+        return args[0]; // (* x) returns x
+    }
+
+    // Start with first argument
+    Value result = args[0];
+
+    // For each subsequent argument, multiply it with result
+    for (size_t i = 1; i < args.size(); ++i) {
+        const Value& current = args[i];
+
+        // Check types and perform multiplication
+        if (result->v_type == V_INT && current->v_type == V_INT) {
+            int n1 = dynamic_cast<Integer*>(result.get())->n;
+            int n2 = dynamic_cast<Integer*>(current.get())->n;
+            // Check for overflow
+            if (n1 > 0) {
+                if (n2 > 0) {
+                    if (n1 > INT_MAX / n2) throw RuntimeError("Integer overflow in multiplication");
+                } else if (n2 < 0) {
+                    if (n2 < INT_MIN / n1) throw RuntimeError("Integer overflow in multiplication");
+                }
+            } else if (n1 < 0) {
+                if (n2 > 0) {
+                    if (n1 < INT_MIN / n2) throw RuntimeError("Integer overflow in multiplication");
+                } else if (n2 < 0) {
+                    if (n1 < INT_MAX / n2) throw RuntimeError("Integer overflow in multiplication");
+                }
+            }
+            result = IntegerV(n1 * n2);
+        }
+        // Handle Rational * Integer
+        else if (result->v_type == V_RATIONAL && current->v_type == V_INT) {
+            Rational* r1 = dynamic_cast<Rational*>(result.get());
+            int n2 = dynamic_cast<Integer*>(current.get())->n;
+            int new_num = r1->numerator * n2;
+            // Check for overflow in multiplication
+            if (r1->numerator != 0 && n2 != 0 &&
+                ((new_num / n2) != r1->numerator || (new_num / r1->numerator) != n2)) {
+                throw RuntimeError("Integer overflow in multiplication");
+            }
+            result = RationalV(new_num, r1->denominator);
+        }
+        // Handle Integer * Rational
+        else if (result->v_type == V_INT && current->v_type == V_RATIONAL) {
+            int n1 = dynamic_cast<Integer*>(result.get())->n;
+            Rational* r2 = dynamic_cast<Rational*>(current.get());
+            int new_num = n1 * r2->numerator;
+            // Check for overflow
+            if (n1 != 0 && r2->numerator != 0 &&
+                ((new_num / n1) != r2->numerator || (new_num / r2->numerator) != n1)) {
+                throw RuntimeError("Integer overflow in multiplication");
+            }
+            result = RationalV(new_num, r2->denominator);
+        }
+        // Handle Rational * Rational
+        else if (result->v_type == V_RATIONAL && current->v_type == V_RATIONAL) {
+            Rational* r1 = dynamic_cast<Rational*>(result.get());
+            Rational* r2 = dynamic_cast<Rational*>(current.get());
+            int new_num = r1->numerator * r2->numerator;
+            int new_den = r1->denominator * r2->denominator;
+            // Check for overflow
+            if (r1->numerator != 0 && r2->numerator != 0 &&
+                ((new_num / r1->numerator) != r2->numerator || (new_num / r2->numerator) != r1->numerator)) {
+                throw RuntimeError("Integer overflow in multiplication");
+            }
+            if (r1->denominator != 0 && r2->denominator != 0 &&
+                ((new_den / r1->denominator) != r2->denominator || (new_den / r2->denominator) != r1->denominator)) {
+                throw RuntimeError("Integer overflow in multiplication");
+            }
+            result = RationalV(new_num, new_den);
+        }
+        else {
+            throw RuntimeError("Wrong typename in multiplication");
+        }
+    }
+
+    return result;
 }
 
 Value DivVar::evalRator(const std::vector<Value> &args) { // / with multiple args
-    //TODO: To complete the divisor logic
+    if (args.empty()) {
+        throw RuntimeError("/ requires at least one argument");
+    }
+
+    if (args.size() == 1) {
+        // (/ x) returns 1/x
+        const Value& arg = args[0];
+        // Check for division by zero
+        if ((arg->v_type == V_INT && dynamic_cast<Integer*>(arg.get())->n == 0) ||
+            (arg->v_type == V_RATIONAL && dynamic_cast<Rational*>(arg.get())->numerator == 0)) {
+            throw RuntimeError("Division by zero");
+        }
+
+        if (arg->v_type == V_INT) {
+            int n = dynamic_cast<Integer*>(arg.get())->n;
+            return RationalV(1, n);
+        } else if (arg->v_type == V_RATIONAL) {
+            Rational* r = dynamic_cast<Rational*>(arg.get());
+            return RationalV(r->denominator, r->numerator);
+        } else {
+            throw RuntimeError("Wrong typename in division");
+        }
+    }
+
+    // Start with first argument
+    Value result = args[0];
+
+    // For each subsequent argument, divide result by it
+    for (size_t i = 1; i < args.size(); ++i) {
+        const Value& current = args[i];
+
+        // Check for division by zero
+        if ((current->v_type == V_INT && dynamic_cast<Integer*>(current.get())->n == 0) ||
+            (current->v_type == V_RATIONAL && dynamic_cast<Rational*>(current.get())->numerator == 0)) {
+            throw RuntimeError("Division by zero");
+        }
+
+        // Check types and perform division
+        if (result->v_type == V_INT && current->v_type == V_INT) {
+            int n1 = dynamic_cast<Integer*>(result.get())->n;
+            int n2 = dynamic_cast<Integer*>(current.get())->n;
+            // Integer division creates rational number
+            result = RationalV(n1, n2);
+        }
+        // Handle Rational / Integer
+        else if (result->v_type == V_RATIONAL && current->v_type == V_INT) {
+            Rational* r1 = dynamic_cast<Rational*>(result.get());
+            int n2 = dynamic_cast<Integer*>(current.get())->n;
+            int new_den = r1->denominator * n2;
+            // Check for overflow
+            if (r1->denominator != 0 && n2 != 0 &&
+                ((new_den / n2) != r1->denominator || (new_den / r1->denominator) != n2)) {
+                throw RuntimeError("Integer overflow in division");
+            }
+            result = RationalV(r1->numerator, new_den);
+        }
+        // Handle Integer / Rational
+        else if (result->v_type == V_INT && current->v_type == V_RATIONAL) {
+            int n1 = dynamic_cast<Integer*>(result.get())->n;
+            Rational* r2 = dynamic_cast<Rational*>(current.get());
+            int new_num = n1 * r2->denominator;
+            // Check for overflow
+            if (n1 != 0 && r2->denominator != 0 &&
+                ((new_num / n1) != r2->denominator || (new_num / r2->denominator) != n1)) {
+                throw RuntimeError("Integer overflow in division");
+            }
+            result = RationalV(new_num, r2->numerator);
+        }
+        // Handle Rational / Rational
+        else if (result->v_type == V_RATIONAL && current->v_type == V_RATIONAL) {
+            Rational* r1 = dynamic_cast<Rational*>(result.get());
+            Rational* r2 = dynamic_cast<Rational*>(current.get());
+            int new_num = r1->numerator * r2->denominator;
+            int new_den = r1->denominator * r2->numerator;
+            // Check for overflow
+            if (r1->numerator != 0 && r2->denominator != 0 &&
+                ((new_num / r1->numerator) != r2->denominator || (new_num / r2->denominator) != r1->numerator)) {
+                throw RuntimeError("Integer overflow in division");
+            }
+            if (r1->denominator != 0 && r2->numerator != 0 &&
+                ((new_den / r1->denominator) != r2->numerator || (new_den / r2->numerator) != r1->denominator)) {
+                throw RuntimeError("Integer overflow in division");
+            }
+            result = RationalV(new_num, new_den);
+        }
+        else {
+            throw RuntimeError("Wrong typename in division");
+        }
+    }
+
+    return result;
 }
 
 Value Expt::evalRator(const Value &rand1, const Value &rand2) { // expt
@@ -220,68 +700,150 @@ int compareNumericValues(const Value &v1, const Value &v2) {
 }
 
 Value Less::evalRator(const Value &rand1, const Value &rand2) { // <
-    //TODO: To complete the less logic
-    throw(RuntimeError("Wrong typename"));
+    int cmp = compareNumericValues(rand1, rand2);
+    return BooleanV(cmp < 0);
 }
 
 Value LessEq::evalRator(const Value &rand1, const Value &rand2) { // <=
-    //TODO: To complete the lesseq logic
-    throw(RuntimeError("Wrong typename"));
+    int cmp = compareNumericValues(rand1, rand2);
+    return BooleanV(cmp <= 0);
 }
 
 Value Equal::evalRator(const Value &rand1, const Value &rand2) { // =
-    //TODO: To complete the equal logic
-    throw(RuntimeError("Wrong typename"));
+    int cmp = compareNumericValues(rand1, rand2);
+    return BooleanV(cmp == 0);
 }
 
 Value GreaterEq::evalRator(const Value &rand1, const Value &rand2) { // >=
-    //TODO: To complete the greatereq logic
-    throw(RuntimeError("Wrong typename"));
+    int cmp = compareNumericValues(rand1, rand2);
+    return BooleanV(cmp >= 0);
 }
 
 Value Greater::evalRator(const Value &rand1, const Value &rand2) { // >
-    //TODO: To complete the greater logic
-    throw(RuntimeError("Wrong typename"));
+    int cmp = compareNumericValues(rand1, rand2);
+    return BooleanV(cmp > 0);
 }
 
 Value LessVar::evalRator(const std::vector<Value> &args) { // < with multiple args
-    //TODO: To complete the less logic
+    if (args.size() < 2) {
+        throw RuntimeError("< requires at least 2 arguments");
+    }
+
+    for (size_t i = 0; i < args.size() - 1; ++i) {
+        int cmp = compareNumericValues(args[i], args[i + 1]);
+        if (cmp >= 0) { // Not strictly less
+            return BooleanV(false);
+        }
+    }
+
+    return BooleanV(true);
 }
 
 Value LessEqVar::evalRator(const std::vector<Value> &args) { // <= with multiple args
-    //TODO: To complete the lesseq logic
+    if (args.size() < 2) {
+        throw RuntimeError("<= requires at least 2 arguments");
+    }
+
+    for (size_t i = 0; i < args.size() - 1; ++i) {
+        int cmp = compareNumericValues(args[i], args[i + 1]);
+        if (cmp > 0) { // Not less or equal
+            return BooleanV(false);
+        }
+    }
+
+    return BooleanV(true);
 }
 
 Value EqualVar::evalRator(const std::vector<Value> &args) { // = with multiple args
-    //TODO: To complete the equal logic
+    if (args.size() < 2) {
+        throw RuntimeError("= requires at least 2 arguments");
+    }
+
+    for (size_t i = 0; i < args.size() - 1; ++i) {
+        int cmp = compareNumericValues(args[i], args[i + 1]);
+        if (cmp != 0) { // Not equal
+            return BooleanV(false);
+        }
+    }
+
+    return BooleanV(true);
 }
 
 Value GreaterEqVar::evalRator(const std::vector<Value> &args) { // >= with multiple args
-    //TODO: To complete the greatereq logic
+    if (args.size() < 2) {
+        throw RuntimeError(">= requires at least 2 arguments");
+    }
+
+    for (size_t i = 0; i < args.size() - 1; ++i) {
+        int cmp = compareNumericValues(args[i], args[i + 1]);
+        if (cmp < 0) { // Not greater or equal
+            return BooleanV(false);
+        }
+    }
+
+    return BooleanV(true);
 }
 
 Value GreaterVar::evalRator(const std::vector<Value> &args) { // > with multiple args
-    //TODO: To complete the greater logic
+    if (args.size() < 2) {
+        throw RuntimeError("> requires at least 2 arguments");
+    }
+
+    for (size_t i = 0; i < args.size() - 1; ++i) {
+        int cmp = compareNumericValues(args[i], args[i + 1]);
+        if (cmp <= 0) { // Not strictly greater
+            return BooleanV(false);
+        }
+    }
+
+    return BooleanV(true);
 }
 
 Value Cons::evalRator(const Value &rand1, const Value &rand2) { // cons
-    //TODO: To complete the cons logic
+    // Create a new pair with rand1 as car and rand2 as cdr
+    return Value(new Pair(rand1, rand2));
 }
 
 Value ListFunc::evalRator(const std::vector<Value> &args) { // list function
-    //TODO: To complete the list logic
+    // Build a list from right to left
+    Value result = Value(new Null()); // Start with empty list
+
+    // Iterate from last to first to build the list
+    for (int i = args.size() - 1; i >= 0; --i) {
+        result = Value(new Pair(args[i], result));
+    }
+
+    return result;
 }
 
 Value IsList::evalRator(const Value &rand) { // list?
-    //TODO: To complete the list? logic
+    // Check if value is a proper list (ends with null)
+    Value current = rand;
+    while (current->v_type == V_PAIR) {
+        Pair* pair = dynamic_cast<Pair*>(current.get());
+        current = pair->cdr;
+    }
+
+    // Proper list ends with null
+    return BooleanV(current->v_type == V_NULL);
 }
 
 Value Car::evalRator(const Value &rand) { // car
-    //TODO: To complete the car logic
+    if (rand->v_type != V_PAIR) {
+        throw RuntimeError("car: argument must be a pair");
+    }
+
+    Pair* pair = dynamic_cast<Pair*>(rand.get());
+    return pair->car;
 }
 
 Value Cdr::evalRator(const Value &rand) { // cdr
-    //TODO: To complete the cdr logic
+    if (rand->v_type != V_PAIR) {
+        throw RuntimeError("cdr: argument must be a pair");
+    }
+
+    Pair* pair = dynamic_cast<Pair*>(rand.get());
+    return pair->cdr;
 }
 
 Value SetCar::evalRator(const Value &rand1, const Value &rand2) { // set-car!
@@ -347,7 +909,56 @@ Value Begin::eval(Assoc &e) {
 }
 
 Value Quote::eval(Assoc& e) {
-    //TODO: To complete the quote logic
+    // Convert Syntax to Value
+    SyntaxBase* syntax_ptr = s.get();
+
+    // Handle Number
+    if (auto* num = dynamic_cast<Number*>(syntax_ptr)) {
+        return IntegerV(num->n);
+    }
+    // Handle RationalSyntax
+    else if (auto* rat = dynamic_cast<RationalSyntax*>(syntax_ptr)) {
+        return RationalV(rat->numerator, rat->denominator);
+    }
+    // Handle TrueSyntax
+    else if (dynamic_cast<TrueSyntax*>(syntax_ptr)) {
+        return BooleanV(true);
+    }
+    // Handle FalseSyntax
+    else if (dynamic_cast<FalseSyntax*>(syntax_ptr)) {
+        return BooleanV(false);
+    }
+    // Handle SymbolSyntax
+    else if (auto* sym = dynamic_cast<SymbolSyntax*>(syntax_ptr)) {
+        return Value(new Symbol(sym->s));
+    }
+    // Handle StringSyntax
+    else if (auto* str = dynamic_cast<StringSyntax*>(syntax_ptr)) {
+        return StringV(str->s);
+    }
+    // Handle List
+    else if (auto* lst = dynamic_cast<List*>(syntax_ptr)) {
+        // Convert list to pair chain
+        // Empty list
+        if (lst->stxs.empty()) {
+            return Value(new Null());
+        }
+
+        // Build list from right to left
+        Value result = Value(new Null()); // Start with empty list
+
+        // Iterate from last to first
+        for (int i = lst->stxs.size() - 1; i >= 0; --i) {
+            // Recursively quote each element
+            Quote quote_expr(lst->stxs[i]);
+            Value elem_value = quote_expr.eval(e);
+            result = Value(new Pair(elem_value, result));
+        }
+
+        return result;
+    }
+
+    throw RuntimeError("Unsupported syntax type in quote");
 }
 
 Value AndVar::eval(Assoc &e) { // and with short-circuit evaluation
@@ -378,17 +989,25 @@ Value Apply::eval(Assoc &e) {
     if (rator->eval(e)->v_type != V_PROC) {throw RuntimeError("Attempt to apply a non-procedure");}
 
     //TODO: TO COMPLETE THE CLOSURE LOGIC
-    Procedure* clos_ptr = ;
-    
+    Procedure* clos_ptr = dynamic_cast<Procedure*>(rator->eval(e).get());
+    if (!clos_ptr) throw RuntimeError("Failed to cast to Procedure");
+
     //TODO: TO COMPLETE THE ARGUMENT PARSER LOGIC
     std::vector<Value> args;
-    if (auto varNode = dynamic_cast<Variadic*>(clos_ptr->e.get())) {
-        //TODO
+    // For now, just evaluate all arguments
+    for (auto& arg_expr : rand) {
+        args.push_back(arg_expr->eval(e));
     }
+
     if (args.size() != clos_ptr->parameters.size()) throw RuntimeError("Wrong number of arguments");
-    
+
     //TODO: TO COMPLETE THE PARAMETERS' ENVIRONMENT LOGIC
-    Assoc param_env = ;
+    Assoc param_env = clos_ptr->env; // Start with closure's environment
+
+    // Extend with parameter bindings
+    for (size_t i = 0; i < args.size(); ++i) {
+        param_env = extend(clos_ptr->parameters[i], args[i], param_env);
+    }
 
     return clos_ptr->e->eval(param_env);
 }
