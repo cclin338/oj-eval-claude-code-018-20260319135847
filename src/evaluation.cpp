@@ -100,9 +100,17 @@ Value Var::eval(Assoc &e) { // evaluation of variable
             //TOD0:to PASS THE parameters correctly;
             //COMPLETE THE CODE WITH THE HINT IN IF SENTENCE WITH CORRECT RETURN VALUE
             if (it != primitive_map.end()) {
-                //TODO
+                // Create a closure for the primitive
+                Expr primitive_expr = it->second.first;
+                std::vector<std::string> params = it->second.second;
+
+                // Create a procedure value
+                Value proc_value = Value(new Procedure(params, primitive_expr, e));
+                return proc_value;
             }
       }
+      // Variable not found and not a primitive
+      throw RuntimeError("undefined variable: " + x);
     }
     return matched_value;
 }
@@ -905,7 +913,20 @@ Value IsString::evalRator(const Value &rand) { // string?
 }
 
 Value Begin::eval(Assoc &e) {
-    //TODO: To complete the begin logic
+    if (es.empty()) {
+        return VoidV(); // (begin) returns void
+    }
+
+    // Start with first expression
+    Value result = es[0]->eval(e);
+
+    // Evaluate remaining expressions in order
+    for (size_t i = 1; i < es.size(); ++i) {
+        result = es[i]->eval(e);
+    }
+
+    // Return value of last expression
+    return result;
 }
 
 Value Quote::eval(Assoc& e) {
@@ -962,27 +983,95 @@ Value Quote::eval(Assoc& e) {
 }
 
 Value AndVar::eval(Assoc &e) { // and with short-circuit evaluation
-    //TODO: To complete the and logic
+    if (rands.empty()) {
+        return BooleanV(true); // (and) returns #t
+    }
+
+    // Evaluate arguments from left to right
+    for (size_t i = 0; i < rands.size(); ++i) {
+        Value result = rands[i]->eval(e);
+
+        // Check if result is false
+        if (result->v_type == V_BOOL) {
+            Boolean* b = dynamic_cast<Boolean*>(result.get());
+            if (!b->b) {
+                return BooleanV(false); // Short-circuit
+            }
+        }
+        // If not a boolean, it's considered true, continue
+
+        // If this is the last argument, return its value
+        if (i == rands.size() - 1) {
+            return result;
+        }
+    }
+
+    // Should not reach here
+    throw RuntimeError("Unexpected error in and evaluation");
 }
 
 Value OrVar::eval(Assoc &e) { // or with short-circuit evaluation
-    //TODO: To complete the or logic
+    if (rands.empty()) {
+        return BooleanV(false); // (or) returns #f
+    }
+
+    // Evaluate arguments from left to right
+    for (size_t i = 0; i < rands.size(); ++i) {
+        Value result = rands[i]->eval(e);
+
+        // Check if result is true (not false)
+        if (result->v_type == V_BOOL) {
+            Boolean* b = dynamic_cast<Boolean*>(result.get());
+            if (b->b) {
+                return result; // Return first true value
+            }
+        } else {
+            // Non-boolean value is considered true
+            return result; // Return first true (non-false) value
+        }
+    }
+
+    // All arguments were false
+    return BooleanV(false);
 }
 
 Value Not::evalRator(const Value &rand) { // not
-    //TODO: To complete the not logic
+    // In Scheme, only #f is false, everything else is true
+    if (rand->v_type == V_BOOL) {
+        Boolean* b = dynamic_cast<Boolean*>(rand.get());
+        return BooleanV(!b->b);
+    }
+    // Any non-boolean value is considered true, so not returns #f
+    return BooleanV(false);
 }
 
 Value If::eval(Assoc &e) {
-    //TODO: To complete the if logic
+    // Evaluate condition
+    Value cond_value = cond->eval(e);
+
+    // Check if condition is false
+    bool is_false = false;
+    if (cond_value->v_type == V_BOOL) {
+        Boolean* b = dynamic_cast<Boolean*>(cond_value.get());
+        is_false = !b->b;
+    }
+    // Non-boolean values are considered true
+
+    // Evaluate appropriate branch
+    if (is_false) {
+        return alter->eval(e); // else branch
+    } else {
+        return conseq->eval(e); // then branch
+    }
 }
 
 Value Cond::eval(Assoc &env) {
     //TODO: To complete the cond logic
 }
 
-Value Lambda::eval(Assoc &env) { 
-    //TODO: To complete the lambda logic
+Value Lambda::eval(Assoc &env) {
+    // Create a closure (procedure value)
+    return Value(new Procedure(x, e, env));
 }
 
 Value Apply::eval(Assoc &e) {
@@ -1013,7 +1102,15 @@ Value Apply::eval(Assoc &e) {
 }
 
 Value Define::eval(Assoc &env) {
-    //TODO: To complete the define logic
+    // Evaluate the expression
+    Value value = e->eval(env);
+
+    // Bind the variable in the environment
+    // Note: In a real Scheme, define should modify the environment.
+    // For now, we'll just return the value.
+    // TODO: Actually modify the environment
+
+    return value;
 }
 
 Value Let::eval(Assoc &env) {
