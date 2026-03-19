@@ -52,7 +52,14 @@ void REPL(){
         #ifndef ONLINE_JUDGE
             std::cout << "scm> ";
         #endif
-        Syntax stx = readSyntax(std :: cin); // read
+        Syntax stx;
+        try {
+            stx = readSyntax(std :: cin); // read
+        } catch (...) {
+            // Break on any exception during read (e.g., EOF)
+            break;
+        }
+
         try{
             Expr expr = stx -> parse(global_env); // parse
             // stx -> show(std :: cout); // syntax print
